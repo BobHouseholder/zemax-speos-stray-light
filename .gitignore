@@ -1,0 +1,41 @@
+# Your machine's configuration. Created by you from straylight.toml.example,
+# describes exactly one machine, and must never be committed -- a customer who
+# inherited someone else's paths would have the config check pass on a file
+# they never wrote.
+straylight.toml
+
+# Run artefacts. A single design's run writes hundreds of megabytes here: ray
+# files, result maps and Speos' own HTML reports. In the tree this package was
+# built from, these classes total over 3 GB against 1.2 MB of source.
+SPEOS output files/
+*.lpf
+*.xmp
+*.xm3
+*.html
+*.odx
+*.scdocx
+*.step
+*.stp
+
+# Optical prescriptions. Stage your own designs under survey/systems/<name>/,
+# and keep them out of version control unless you are certain they are yours to
+# publish -- lens prescriptions are frequently licensed sample files or
+# customer-confidential.
+*.zmx
+*.zda
+survey/systems/
+
+# Generated job manifests and logs
+*.job.json
+*.built.json
+*.cfg.txt
+*.log
+*.err
+*.out
+*.pid
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/

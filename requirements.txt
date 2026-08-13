@@ -1,0 +1,26 @@
+# Third-party packages the pipeline imports, for the DRIVER interpreter
+# (`python_exe` in straylight.toml). Install with:
+#
+#     python -m pip install -r requirements.txt
+#
+# then confirm with:
+#
+#     python lib\settings.py --check
+#
+# Not pinned deliberately: this tracks whichever Ansys release straylight.toml
+# points at, and pinning here would silently contradict that.
+
+# Reads Speos .lpf ray files. Needs SpeosRPC_Server.exe, which ships inside the
+# Ansys install (Optical Products\SPEOS_RPC\) -- there is nothing extra to
+# obtain, but the server does check out one `speos_level1` seat while running.
+ansys-speos-core
+
+# Builds the mechanical barrel geometry exported to Speos as STEP.
+cadquery
+
+# Only needed with the regression suite (`build-distribution.py
+# --with-testcases`): recheck-oversize.py and rederive-section6.py use it.
+# Found 2026-08-09 by the dependency check on its first run against a
+# with-testcases build -- it had been an undeclared requirement of the suite
+# for as long as those scripts have existed.
+scipy

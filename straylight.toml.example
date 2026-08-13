@@ -1,0 +1,41 @@
+# straylight.toml -- machine-specific paths for the stray-light pipeline.
+#
+# Copy this file to `straylight.toml` beside it and edit the four values to
+# match this machine. Nothing else in the pipeline needs editing: every other
+# path is derived from the location of the code itself.
+#
+# Verify before running anything:
+#
+#     python lib\settings.py --check
+#
+# That prints each resolved path and whether it exists. It is the ONLY step
+# between installing the pipeline and running it, and skipping it is how you
+# get a failure 200 lines later instead of here.
+
+[paths]
+
+# The Ansys unified install root for the release you use. This supplies BOTH
+# the Speos launcher and the bundled CPython 3.10 -- the Illumine SWIG bindings
+# that read .lpf ray files load under that interpreter and NO other, so a
+# python.org 3.10 will not substitute.
+#   contains: "Optical Products\Speos\bin\AnsysSpeosLauncher.exe"
+#             "commonfiles\CPython\3_10\winx64\Release\python\python.exe"
+ansys_root = "C:/Program Files/ANSYS Inc/v261"
+
+# The OpticStudio install directory -- the one holding ZOSAPI_NetHelper.dll.
+# Version-stamped, so it changes with every OpticStudio release.
+# Leave as "" if OpticStudio is not installed here; the Speos half of the
+# pipeline still runs, and anything needing ZOS-API will say so by name.
+opticstudio_root = "C:/Program Files/Ansys Zemax OpticStudio 2026 R1.00"
+
+# The ordinary CPython 3.10+ that runs the drivers. NOT the Ansys one above:
+# the drivers need packages (CadQuery, numpy) that the bundled interpreter
+# does not carry. A venv is the usual answer.
+python_exe = "C:/flv/Scripts/python.exe"
+
+# Your OpticStudio user-data folder -- the one holding "Samples" and
+# "Design Templates". OpticStudio puts it under Documents by default, but it
+# is relocatable in Project Preferences, which is why it is configured rather
+# than assumed. Used only by the survey helpers that stage example lenses.
+# Leave as "" if you are supplying your own lens files.
+zemax_data = ""
