@@ -164,7 +164,8 @@ BUILD_ONLY = {"pypdf"}
 # config file they have to create, and a command they can actually run.
 DOC_README = "README.md"
 DOC_GUIDE = "toolchain-install-a4.pdf"
-DOC_MUST_MENTION = ("straylight.toml", "settings.py", "run-fleet.py")
+DOC_MUST_MENTION = ("straylight.toml", "settings.py", "run-fleet.py",
+                    "first-run.py")
 
 # Never, under any rule. Checked again after the build as a backstop, because
 # the allowlist and this list are meant to disagree about nothing.

@@ -47,6 +47,35 @@ it distinguishes a path that does not exist from one that exists but is not
 the kind of folder expected. Do not proceed past a failure here; every later
 stage assumes this passed. Full detail is in the guide, steps 1–4.
 
+## First run — prove the installation before supplying a design
+
+No lens prescriptions ship with this package, so your first obstacle would
+otherwise be supplying one before you have any evidence the installation
+works. When something then fails, there is no way to tell whether the fault is
+your config, your Ansys install, your lens, or the pipeline.
+
+This separates those questions:
+
+```bash
+python lib/first-run.py
+```
+
+It generates a known-good example design, builds its job manifest, and runs
+preflight on it — about ten seconds of OpticStudio. A `GO` means your
+installation works end to end. Because the example is known to pass, a failure
+here is your installation and not the design, and the tool says which of the
+four candidates to look at first.
+
+Add `--full` to take that same example through all eight stages and produce an
+actual stray-light number (~40 minutes, and it holds the HPC entitlement
+throughout).
+
+The example is **generated, not shipped**: `lib/first-run-lens.ps1` builds an
+ordinary Cooke triplet — f/5, 50 mm focal length, ±14° field, catalog glasses —
+from a fixed prescription of our own, and your OpticStudio writes the `.zmx`.
+Nothing is redistributed, which is how this package can contain a working
+example while containing no `.zmx` at all.
+
 ## Running it
 
 Stage each design in its own folder, where the folder name and file name
