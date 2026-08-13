@@ -370,9 +370,29 @@ def verify(out, with_tests):
             acct.append(rel)
         if rel not in ATTRIB_ALLOWED and ATTRIB.search(raw):
             attrib.append(rel)
-    if leaks:
+    # SEPARATE BUILD RESIDUE FROM A REAL LEAK. Both are genuine reasons not to
+    # ship this directory, but they have different causes and different fixes,
+    # and one message for both sends you looking in the wrong place.
+    #
+    # Found 2026-08-13: running the shipped `run-bsdf-band.py` from inside the
+    # build to check it worked left `__pycache__/` behind, and a .pyc embeds
+    # the ABSOLUTE PATH of the .py it was compiled from -- so the check
+    # correctly refused a build whose every source file was clean. Keep it
+    # refusing (a zipped build directory with .pyc in it really would leak),
+    # but say what happened: nothing is wrong with the code, something was RUN
+    # here.
+    residue = [r for r in leaks if r.endswith(".pyc") or "__pycache__" in r]
+    real = [r for r in leaks if r not in residue]
+    if real:
         problems.append("%d file(s) leak the operator's home path: %s"
-                        % (len(leaks), ", ".join(leaks[:5])))
+                        % (len(real), ", ".join(real[:5])))
+    if residue:
+        problems.append(
+            "%d compiled-Python file(s) are build residue, not shipped source, "
+            "but a .pyc embeds the absolute path of the .py it came from -- so "
+            "this directory must not be distributed until they are deleted. "
+            "Something was RUN from inside the build. Remove __pycache__/ and "
+            "re-check: %s" % (len(residue), ", ".join(residue[:3])))
     if acct:
         problems.append("%d file(s) quote an account number: %s"
                         % (len(acct), ", ".join(acct[:5])))
