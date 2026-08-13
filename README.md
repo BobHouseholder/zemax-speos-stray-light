@@ -100,6 +100,53 @@ from a fixed prescription of our own, and your OpticStudio writes the `.zmx`.
 Nothing is redistributed, which is how this package can contain a working
 example while containing no `.zmx` at all.
 
+## The sample set — reproduce the range yourself
+
+One example makes a misleading advertisement. The triplet returns −95.6%, and
+the natural conclusion from a single data point is "this always gives you 95%."
+It does not, and the honest claim is the whole reason to run a simulation
+rather than consult a rule of thumb.
+
+```bash
+python lib/make-samples.py
+```
+
+generates four designs and their manifests; `python lib/run-fleet.py` then runs
+them. **Measured on the reference machine, with the shipped synthetic BSDF:**
+
+| design | f/# | field | track | stray before | stray after | change | imaging |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `example-triplet` | f/5 | ±14° | 62 mm | 0.08802 W | 0.00391 W | **−95.6%** decisive | −0.4% |
+| `wfov-30` | f/4 | ±30° | 38 mm | 0.06699 W | 0.05475 W | **−18.3%** decisive | −0.6% |
+| `fast-f2p5` | f/2.5 | ±10° | 65 mm | 0.03773 W | 0.03671 W | **−2.7%** barely significant (2.1σ) | −0.5% |
+| `longbore-f8` | f/8 | ±4° | 205 mm | 0.08126 W | 0.08068 W | **−0.7% — no change (0.6σ)** | +0.3% |
+
+All four carry the same ±1.3% Monte-Carlo uncertainty, so `fast-f2p5`'s −2.7% is
+only twice its own error bar, and **`longbore-f8` shows no effect at all**. That
+last row is the most useful thing in this table. A workflow that always reports
+a large improvement is a brochure; this one will tell you when the redesign is
+not worth building, and that verdict is worth more than a flattering number
+because it is the one that saves you the part.
+
+The imaging column is what makes the stray column mean anything — a barrel that
+simply blocked the lens would also remove stray light. Throughput survives
+everywhere here, so these are baffling, not blocking.
+
+**How the set was chosen, since it determines what it is evidence of.** The four
+archetypes were fixed on optical grounds — f/number, field, track length,
+element count — *before* any of them were run, and every result is published.
+They were not selected for their numbers, and could not have been: nobody here
+can predict which design gives a large benefit. Five separate proxies for that
+were tested against measurement and all five failed, which is precisely why the
+tool exists. The author's own prediction before running these was that
+`longbore-f8`, a 205 mm tube at ±4°, would show the largest benefit. It came
+last.
+
+Three of the four report their stray angle as **not resolved** — the worst-case
+angle sits in the first bin the search may consider, so the measured reduction
+is real while the *angle* is a lower bound. That is disclosed rather than
+hidden, and you will meet the same disclosure on your own designs.
+
 ## Running it
 
 Stage each design in its own folder, where the folder name and file name

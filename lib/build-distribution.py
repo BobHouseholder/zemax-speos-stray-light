@@ -1,4 +1,4 @@
-"""build-distribution.py -- assemble the shippable pipeline. Allowlist only.
+﻿"""build-distribution.py -- assemble the shippable pipeline. Allowlist only.
 
     python lib/build-distribution.py [--out DIR] [--with-testcases] [--check]
 
@@ -165,7 +165,7 @@ BUILD_ONLY = {"pypdf"}
 DOC_README = "README.md"
 DOC_GUIDE = "toolchain-install-a4.pdf"
 DOC_MUST_MENTION = ("straylight.toml", "settings.py", "run-fleet.py",
-                    "first-run.py")
+                    "first-run.py", "make-samples.py")
 
 # Never, under any rule. Checked again after the build as a backstop, because
 # the allowlist and this list are meant to disagree about nothing.
