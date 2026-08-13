@@ -191,16 +191,27 @@ def report_result(m):
         print("    measured at %.1f deg, off a %.0f deg design field"
               % (sa_j.get("strayDeg", 0), sa_j.get("maxFieldDeg", 0)))
         if not sa_j.get("resolved", True):
-            print("    NOT RESOLVED -- the worst angle was not located. The peak")
-            print("    sits in the first bin the search is allowed to consider")
-            print("    (%.0f-%.0f deg), which is the edge of the window rather"
+            print("    NOT RESOLVED -- the peak sits in the first bin the search")
+            print("    is allowed to consider (%.0f-%.0f deg), so it is the edge"
                   % (sa_j.get("firstAdmissibleEdge", 0),
                      sa_j.get("firstAdmissibleEdge", 0) + sa_j.get("binDeg", 0)))
-            print("    than a peak inside it, so the true worst angle may lie")
-            print("    closer to the field. The reduction above is real and")
-            print("    measured; treat the ANGLE as a lower bound. This is a")
-            print("    common and correct outcome, not a fault -- the pipeline")
-            print("    reports it rather than quietly picking a number.")
+            print("    of the search window rather than a located maximum. This")
+            print("    is a REQUEST FOR A FORWARD SWEEP, not a fault, and it is")
+            print("    the common case -- three of the four bundled designs")
+            print("    carry it.")
+            if m["slug"] == SLUG:
+                # MEASURED, not asserted. The forward sweep was run for this
+                # example; publishing the outcome is more use to a reader than
+                # repeating the warning.
+                print("")
+                print("    For THIS example the sweep has been run. 15 deg is")
+                print("    confirmed as the worst angle for the naive tube --")
+                print("    the ranking was right. But the seated barrel's worst")
+                print("    RESIDUAL sits at 18 deg, where the benefit is -85.8%")
+                print("    rather than -95.6%. A redesign can move where the")
+                print("    remaining stray comes in, so the worst angle before")
+                print("    is not necessarily the worst angle after. See the")
+                print("    README section 'Where the stray peak moves'.")
     return True
 
 

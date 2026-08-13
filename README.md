@@ -83,7 +83,12 @@ returns:
 | Imaging throughput | −0.4%, no significant change |
 
 If your figure is close to −95%, your installation is not merely running, it is
-producing the right answer. The imaging row is the one that makes the stray row
+producing the right answer.
+
+That −95.6% is measured at 15°, where the **baseline's** stray peaks. A forward
+sweep (below) later showed the redesigned system's worst residual sits at 18°
+instead, where the benefit is **−85.8%**. Both are true and neither is the
+"right" number on its own — see *Where the stray peak moves*. The imaging row is the one that makes the stray row
 mean anything: a barrel that simply blocked the lens would also remove stray
 light, so throughput has to survive.
 
@@ -116,7 +121,7 @@ them. **Measured on the reference machine, with the shipped synthetic BSDF:**
 
 | design | f/# | field | track | stray before | stray after | change | imaging |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `example-triplet` | f/5 | ±14° | 62 mm | 0.08802 W | 0.00391 W | **−95.6%** decisive | −0.4% |
+| `example-triplet` | f/5 | ±14° | 62 mm | 0.08802 W | 0.00391 W | **−95.6%** decisive † | −0.4% |
 | `wfov-30` | f/4 | ±30° | 38 mm | 0.06699 W | 0.05475 W | **−18.3%** decisive | −0.6% |
 | `fast-f2p5` | f/2.5 | ±10° | 65 mm | 0.03773 W | 0.03671 W | **−2.7%** barely significant (2.1σ) | −0.5% |
 | `longbore-f8` | f/8 | ±4° | 205 mm | 0.08126 W | 0.08068 W | **−0.7% — no change (0.6σ)** | +0.3% |
@@ -142,10 +147,47 @@ tool exists. The author's own prediction before running these was that
 `longbore-f8`, a 205 mm tube at ±4°, would show the largest benefit. It came
 last.
 
-Three of the four report their stray angle as **not resolved** — the worst-case
-angle sits in the first bin the search may consider, so the measured reduction
-is real while the *angle* is a lower bound. That is disclosed rather than
-hidden, and you will meet the same disclosure on your own designs.
+† `example-triplet` is measured at 15°; its worst *residual* angle is 18°, where
+the benefit is −85.8%. See below.
+
+Three of the four report their stray angle as **not resolved** — the peak sits
+in the first bin the search may consider, so it is the edge of the search
+window rather than a located maximum. That is disclosed rather than hidden, and
+you will meet the same disclosure on your own designs.
+
+### Where the stray peak moves
+
+`resolved: false` is a **request for a forward sweep**, not a defect. We ran
+those sweeps on all three flagged designs — the seated geometry, seven angles
+each, plus a repeat angle for a run-to-run noise estimate:
+
+| design | ranked | forward peak | flux at peak ÷ at ranked | repeat noise |
+| --- | --- | --- | --- | --- |
+| `wfov-30` | 31° | 31° | 1.00× | 0.5% |
+| `longbore-f8` | 5° | 5° | 1.00× | 0.1% |
+| `example-triplet` | 15° | **18°** | **2.94×** | 3.1% |
+
+Two confirm exactly. The third is the interesting one, and it is **not** a case
+of the selector picking a wrong angle — a baseline sweep over the same angles
+shows the *naive tube's* stray peaks at 15°, precisely where it was ranked:
+
+| angle | naive tube | seated barrel | reduction |
+| --- | --- | --- | --- |
+| **15°** | **0.0882 W** ← baseline peaks | 0.00385 W | **−95.6%** |
+| **18°** | 0.0795 W | **0.0113 W** ← residual peaks | **−85.8%** |
+| 22° | 0.0393 W | 0.00721 W | −81.6% |
+| 26° | 0.0199 W | 0.000265 W | −98.7% |
+
+**The redesign moves where the residual comes in.** The barrel is extremely
+effective at 15° and less so at 18°, so the worst remaining stray after the
+redesign is not at the angle that was worst before it. Quote −95.6% as the
+reduction at the baseline's worst angle, and −85.8% as the benefit at the
+redesigned system's worst angle. The second is the more conservative number and
+the more useful one if you are sizing a margin.
+
+This generalises, and it is worth knowing before you trust any single-angle
+result: **the worst angle before a redesign is not necessarily the worst angle
+after it.** That is exactly what `resolved: false` exists to make you check.
 
 ## How much does the wall model move the answer?
 
@@ -177,10 +219,15 @@ Measured across the four sample designs:
 
 | design | field | low (TIS 12.5%) | mid (shipped) | high (TIS 50%) | spread |
 | --- | --- | --- | --- | --- | --- |
-| `example-triplet` | ±14° | −96.5% | −95.6% | −94.3% | 2.2 pp |
+| `example-triplet` ‡ | ±14° | −96.5% | −95.6% | −94.3% | 2.2 pp |
 | `wfov-30` | ±30° | −12.7% | −18.3% | −25.5% | **12.7 pp** |
 | `fast-f2p5` | ±10° | −2.4% | −2.7% | −2.7% | 0.3 pp |
 | `longbore-f8` | ±4° | −1.4% | −0.7% | −0.4% | 0.9 pp |
+
+‡ Each design's band is measured at its own ranked angle, so
+`example-triplet`'s band is the spread at 15°. The band and the angle are
+independent questions; the 18° residual peak discussed above has not been
+banded.
 
 Reproduce it — both band models ship, so this needs nothing else:
 
