@@ -147,6 +147,86 @@ angle sits in the first bin the search may consider, so the measured reduction
 is real while the *angle* is a lower bound. That is disclosed rather than
 hidden, and you will meet the same disclosure on your own designs.
 
+## How much does the wall model move the answer?
+
+`black-anodize-plausible.anisotropicbsdf` is **synthetic** — a physically
+reasonable stand-in, not measured data — and it is one of the largest
+uncertainties in the workflow. Replacing a specular black wall with it moved
+20° stray flux by +22% and grew the measured vane benefit from −15.7% to
+−24.6%. A stray-light number quoted without reference to the wall model is
+quoting an unstated assumption.
+
+So the model is bracketed rather than trusted. Two more copies of the same
+physical model ship alongside it — a Lambertian floor plus a specular lobe
+rising steeply toward grazing, the characteristic black-surface behaviour —
+with only the level scaled:
+
+| | normal-incidence TIS | at 75° | represents |
+| --- | --- | --- | --- |
+| low | 2.2% | 12.5% | a good black coating |
+| **mid** | **4.5%** | **25%** | **the shipped model** |
+| high | 9.0% | 50% | a poor or aged surface |
+
+A factor of four in reflectance brackets the range of real black-surface data
+(Fest, *Stray Light Analysis and Control*). The band is deliberately wide: its
+job is to bound the answer, not to flatter it.
+
+The headline reduction is a **ratio** of two runs sharing the same walls, so it
+should be far more stable than either absolute flux. That was a hypothesis.
+Measured across the four sample designs:
+
+| design | field | low (TIS 12.5%) | mid (shipped) | high (TIS 50%) | spread |
+| --- | --- | --- | --- | --- | --- |
+| `example-triplet` | ±14° | −96.5% | −95.6% | −94.3% | 2.2 pp |
+| `wfov-30` | ±30° | −12.7% | −18.3% | −25.5% | **12.7 pp** |
+| `fast-f2p5` | ±10° | −2.4% | −2.7% | −2.7% | 0.3 pp |
+| `longbore-f8` | ±4° | −1.4% | −0.7% | −0.4% | 0.9 pp |
+
+Reproduce it — both band models ship, so this needs nothing else:
+
+```bash
+python run-bsdf-band.py --samples
+```
+
+**The hypothesis holds.** A fourfold swing in wall reflectance moves the
+reduction by 0.3 to 12.7 pp, on benefits spanning −0.7% to −95.6%, and for
+three of the four designs the *conclusion* does not change at all:
+
+- `example-triplet` stays decisively beneficial at every wall model (2.2 pp).
+- `wfov-30` stays decisively beneficial, but the **size** of the benefit
+  roughly doubles across the span, −12.7% to −25.5%. This is the caveat case:
+  quote it as "−18%, and between −13% and −26% depending on your surface
+  finish", never as a bare number. Wide fields have moved most throughout this
+  work.
+- **`longbore-f8` is null at every wall model** — not statistically significant
+  at any of the three. "This design does not benefit from vanes" survives a
+  fourfold reflectance swing, which makes it a far stronger recommendation than
+  a single run could support.
+- `fast-f2p5` is the one whose verdict shifts, clearing significance at two of
+  three wall models. What changes is "marginal" versus "negligible" — every
+  value sits between −2.4% and −2.7% — so nothing anyone would act on
+  differently.
+
+The direction is **not** consistent: worse walls give `wfov-30` and `fast-f2p5`
+*more* benefit and `example-triplet` and `longbore-f8` *less*. Four points is
+far too few to build a rule on, and this project has already refuted five
+plausible-looking predictors of exactly this kind, so it is recorded as an
+observation and nothing is inferred from it.
+
+All four spreads fall inside the 0.2–28.6 pp band this README quotes from the
+development corpus, so that figure is now corroborated by designs you can run
+yourself rather than asserted from files that cannot ship.
+
+**What this does not settle.** A band that moves the magnitude is a caveat you
+state and move on from. A band that spans "clear benefit" to "no benefit" means
+the simulation does not answer the question for that design without measured
+BSDF data — and that case is real: for designs with a window close to the
+sensor, the corpus band contains zero, so the *sign* is undetermined. None of
+the four designs here is in that class, which is a fact about this sample set
+and not a general reassurance. If your housing's real surface finish matters to
+your conclusion, measured BSDF data for your actual coating at 60–75° angles of
+incidence remains the highest-value input you can add.
+
 ## Running it
 
 Stage each design in its own folder, where the folder name and file name

@@ -108,6 +108,22 @@ ROOT_FILES = [
     # when the regression suite is not shipped. Found the same way -- the
     # fleet run reached sim_optics and stopped.
     "testcases/wire-optics-only.py",
+    # THE WALL-BSDF BAND, added 2026-08-13. The README tells a reader to bound
+    # the wall-model uncertainty themselves, and that instruction is worthless
+    # without the driver and the two bracketing models.
+    #
+    # `make-bsdf-band.py`, which BUILT these two, deliberately does NOT ship: it
+    # imports `ansys_optical_automation`, which is Ansys's own MIT library,
+    # excluded from this build on necessity grounds and fetched separately per
+    # the install guide. Shipping the generator would either fail the
+    # undeclared-third-party-import check or need an exemption for a package
+    # that is not part of the Ansys install -- so the MODELS ship pre-built and
+    # the README states how they were derived. There is no redistribution
+    # question about the .anisotropicbsdf files themselves: they are ours,
+    # generated from our own scatter model.
+    "run-bsdf-band.py",
+    "black-anodize-low.anisotropicbsdf",
+    "black-anodize-high.anisotropicbsdf",
 ]
 
 # Files referenced as `os.path.join(BASE, "x")` or `$BASE\x` by shipped code.
