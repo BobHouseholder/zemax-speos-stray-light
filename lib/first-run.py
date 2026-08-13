@@ -29,11 +29,15 @@ few for the lens itself. It answers "is this installation wired up correctly"
 and nothing else -- deliberately, because the answer is worth having before
 anyone commits an hour of solver time.
 
-`--full` runs all eight stages, roughly forty minutes, almost all of it Speos.
+`--full` runs all eight stages: about nine minutes for this example on the
+reference machine, almost all of it Speos. (Forty minutes is the fairer figure
+for a typical design of your own -- the bundled example is deliberately small.)
 It takes the OPTIS HPC entitlement for the duration; nothing else can solve
 while it runs. See section 7 of the install guide.
 """
 import argparse
+import glob
+import json
 import os
 import subprocess
 import sys
@@ -41,6 +45,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import settings  # noqa: E402  -- validates the whole config at import
 import job as J  # noqa: E402
+import kpi  # noqa: E402
+import pst_read  # noqa: E402
 
 BASE = J.BASE
 LIB = os.path.join(BASE, "lib")
@@ -98,11 +104,112 @@ def run(cmd, what, timeout):
     return p.returncode
 
 
+def find_report(wd, name):
+    hits = glob.glob(os.path.join(wd, "SPEOS output files", "*", name))
+    return hits[0] if hits else None
+
+
+def report_result(m):
+    """Print what the run actually MEASURED. True if there was a result.
+
+    Added after the first --full run of the example, which spent nine minutes
+    producing a stray-light number and then reported the PREFLIGHT verdict --
+    the one thing that had already been true before it started. A tool that
+    runs the loop and does not show you its answer has not finished.
+
+    Nothing here is recomputed: `pst_read.report_flux` is the reader every
+    other analyser uses, and `kpi` owns the uncertainty and the significance
+    verdict. The flux regex alone exists in nine places in this tree already;
+    a tenth copy here would be the same mistake in a new file.
+    """
+    pre = m["simPrefix"]
+    wd = m["workdir"]
+    rays = m.get("sim", {}).get("rays", {})
+    fb = find_report(wd, "SV_Stray_%s_base.Report.html" % pre)
+    fa = find_report(wd, "SV_Stray_%s_redesign.Report.html" % pre)
+    if not fb or not fa:
+        return False
+    sb, _ = pst_read.report_flux(fb)
+    sa, _ = pst_read.report_flux(fa)
+    if sb is None or sa is None or sb == 0:
+        return False
+
+    n = rays.get("stray", 1000000)
+    c = kpi.compare(kpi.Measure.from_rays(sb, n), kpi.Measure.from_rays(sa, n),
+                    "stray flux")
+    print("\n  STRAY LIGHT")
+    print("    before (naive tube)   %.5f W" % c["before"])
+    print("    after  (seated barrel) %.5f W" % c["after"])
+    print("    change  %+.1f%% +/- %.1f%%   (%.1f sigma, %s)"
+          % (c["delta_pct"], c["sigma_pct"], c["n_sigma"], c["verdict"]))
+
+    # THE CHECK THAT MAKES THE NUMBER MEAN ANYTHING. A barrel that obstructs
+    # the imaging beam also removes stray light, and reports a triumphant
+    # reduction while destroying the lens -- that is a real failure this
+    # pipeline has produced before (schamm110, -91% with the beam blocked).
+    # So always show what happened to the light that is supposed to get
+    # through, next to the light that is not.
+    ni = rays.get("infield", 200000)
+    worst = None
+    for i in (1, 2, 3):
+        pb = find_report(wd, "SV_F%dv_%s_base.Report.html" % (i, pre))
+        pa = find_report(wd, "SV_F%dv_%s_redesign.Report.html" % (i, pre))
+        if not pb or not pa:
+            continue
+        b, _ = pst_read.report_flux(pb)
+        a, _ = pst_read.report_flux(pa)
+        if not b or not a:
+            continue
+        ci = kpi.compare(kpi.Measure.from_rays(b, ni),
+                         kpi.Measure.from_rays(a, ni), "field %d" % i)
+        if worst is None or abs(ci["delta_pct"]) > abs(worst["delta_pct"]):
+            worst = ci
+    if worst is not None:
+        print("\n  IMAGING THROUGHPUT (this is what says the barrel baffles")
+        print("  the stray light rather than simply blocking the lens)")
+        print("    largest change across the three fields  %+.1f%% (%s)"
+              % (worst["delta_pct"], worst["verdict"]))
+
+    # The angle the measurement was taken at, and whether it is the worst one.
+    #
+    # NOT J.load: that validates the job-manifest schema and rejects anything
+    # without `schema: straylight-job/1`, which this file does not have. The
+    # first version called it anyway inside a bare `except Exception`, so the
+    # whole section silently vanished from the report and the reason -- a
+    # perfectly clear ValueError naming the schema -- was swallowed. Read it as
+    # plain JSON, and narrow the guard so a genuinely broken file still speaks.
+    apath = J.path_for(m["slug"], wd, "strayangle")
+    sa_j = {}
+    if os.path.exists(apath):
+        try:
+            with open(apath, encoding="utf-8-sig") as fh:
+                sa_j = json.load(fh)
+        except (OSError, ValueError) as exc:
+            print("\n  (stray-angle record present but unreadable: %s)" % exc)
+    if sa_j:
+        print("\n  STRAY ANGLE")
+        print("    measured at %.1f deg, off a %.0f deg design field"
+              % (sa_j.get("strayDeg", 0), sa_j.get("maxFieldDeg", 0)))
+        if not sa_j.get("resolved", True):
+            print("    NOT RESOLVED -- the worst angle was not located. The peak")
+            print("    sits in the first bin the search is allowed to consider")
+            print("    (%.0f-%.0f deg), which is the edge of the window rather"
+                  % (sa_j.get("firstAdmissibleEdge", 0),
+                     sa_j.get("firstAdmissibleEdge", 0) + sa_j.get("binDeg", 0)))
+            print("    than a peak inside it, so the true worst angle may lie")
+            print("    closer to the field. The reduction above is real and")
+            print("    measured; treat the ANGLE as a lower bound. This is a")
+            print("    common and correct outcome, not a fault -- the pipeline")
+            print("    reports it rather than quietly picking a number.")
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--full", action="store_true",
                     help="continue past preflight through all eight stages "
-                         "(~40 min, takes the HPC entitlement throughout)")
+                         "(~9 min for this example; takes the HPC "
+                         "entitlement throughout)")
     ap.add_argument("--rebuild", action="store_true",
                     help="regenerate the example lens even if it already exists")
     a = ap.parse_args()
@@ -156,7 +263,7 @@ def main():
     stages = "all eight stages" if a.full else "preflight only"
     step(4, total, "Running the example (%s)" % stages)
     if a.full:
-        print("  This takes roughly forty minutes and holds the HPC")
+        print("  About nine minutes for this example, and it holds the HPC")
         print("  entitlement throughout. It is resumable: if it is interrupted,")
         print("  running it again picks up from the last completed stage.\n")
     cmd = [settings.PYTHON_EXE, os.path.join(LIB, "run-fleet.py"),
@@ -181,11 +288,20 @@ def main():
     except Exception:                                             # noqa: BLE001
         pass
     if verdict in ("GO", "GO-WITH-WARNINGS") and rc == 0:
-        print("FIRST RUN OK -- preflight returned %s" % verdict)
+        # Headline what this run actually established. After --full, "preflight
+        # returned GO" is technically true and useless: it was already true
+        # before the nine minutes of solver time started.
+        if a.full:
+            print("FIRST RUN OK -- the loop closed end to end")
+        else:
+            print("FIRST RUN OK -- preflight returned %s" % verdict)
         print("=" * 72)
+        if a.full:
+            report_result(J.load(mpath))
         print("\nYour installation works end to end. What to do next:\n")
         if not a.full:
-            print("  Run the example the whole way (~40 min):")
+            print("  Run the example the whole way (~9 min) for a real")
+            print("  stray-light number and a known answer to check against:")
             print("      python lib/first-run.py --full\n")
         print("  Then stage a design of your own -- folder name and file name")
         print("  must match, and that name becomes the job's name everywhere:\n")

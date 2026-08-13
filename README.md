@@ -67,8 +67,32 @@ here is your installation and not the design, and the tool says which of the
 four candidates to look at first.
 
 Add `--full` to take that same example through all eight stages and produce an
-actual stray-light number (~40 minutes, and it holds the HPC entitlement
-throughout).
+actual stray-light number. It holds the HPC entitlement throughout, so nothing
+else can solve while it runs. On the reference machine it takes **about nine
+minutes** — the example is a small, fast design; your own lenses will generally
+take longer, and forty minutes is a fairer figure for a typical one.
+
+That run doubles as a known-answer check. On the reference machine the example
+returns:
+
+| | |
+| --- | --- |
+| Stray flux, naive tube | 0.08802 W |
+| Stray flux, seated barrel | 0.00391 W |
+| Change | **−95.6% ± 1.3%** (75.1σ, decisive) |
+| Imaging throughput | −0.4%, no significant change |
+
+If your figure is close to −95%, your installation is not merely running, it is
+producing the right answer. The imaging row is the one that makes the stray row
+mean anything: a barrel that simply blocked the lens would also remove stray
+light, so throughput has to survive.
+
+`--full` also reports the stray angle as **not resolved** for this example. That
+is expected and is not a fault: the worst-case angle sits in the first bin the
+search is permitted to consider, at the edge of the window rather than inside
+it, so the measured reduction is real while the *angle* is a lower bound. The
+pipeline says so rather than quietly picking a number, and you will see the same
+disclosure on your own designs when it applies.
 
 The example is **generated, not shipped**: `lib/first-run-lens.ps1` builds an
 ordinary Cooke triplet — f/5, 50 mm focal length, ±14° field, catalog glasses —
