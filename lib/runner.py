@@ -36,6 +36,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import settings  # noqa: E402
 import job as J
+import seat  # noqa: E402 -- for OWNER_ENV only; the lock itself is re-implemented below
 from guard import GuardError, assert_file, assert_speos_run, load_json_checked
 
 BASE = J.BASE
@@ -144,6 +145,19 @@ class RunnerLock:
         with open(LOCK, "w") as f:
             f.write("pid=%d start=%s at=%s holder=stray-light-loop/runner.py"
                     % (os.getpid(), start, J.now().replace(" ", "T")))
+        # PUBLISH OURSELVES AS THE OWNER so the guarded drivers this runner
+        # launches -- confirm-angle.py above all -- re-enter instead of
+        # deadlocking against their own parent. See seat.OWNER_ENV for the
+        # failure this repairs: the forward confirm raised RuntimeError on every
+        # fleet run from the day the guard landed until 2026-08-13, and the
+        # error went to a stage log nobody reads.
+        #
+        # NOTE THE DUPLICATION. This class re-implements lib/seat.py's lock
+        # rather than importing it, so the two must agree on the marker name --
+        # which is why it is imported from there and not spelled again here.
+        # Unifying them is the real fix and is deliberately not attempted in
+        # the same change as repairing a live defect.
+        os.environ[seat.OWNER_ENV] = str(os.getpid())
         return self
 
     def __exit__(self, *exc):
@@ -157,6 +171,7 @@ class RunnerLock:
             os.remove(LOCK)
         except OSError:
             pass
+        os.environ.pop(seat.OWNER_ENV, None)
 
 
 def clear_seat():

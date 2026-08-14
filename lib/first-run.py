@@ -170,48 +170,50 @@ def report_result(m):
         print("    largest change across the three fields  %+.1f%% (%s)"
               % (worst["delta_pct"], worst["verdict"]))
 
-    # The angle the measurement was taken at, and whether it is the worst one.
+    # THE ANGLE, FROM THE RIGHT FILE.
     #
-    # NOT J.load: that validates the job-manifest schema and rejects anything
-    # without `schema: straylight-job/1`, which this file does not have. The
-    # first version called it anyway inside a bare `except Exception`, so the
-    # whole section silently vanished from the report and the reason -- a
-    # perfectly clear ValueError naming the schema -- was swallowed. Read it as
-    # plain JSON, and narrow the guard so a genuinely broken file still speaks.
-    apath = J.path_for(m["slug"], wd, "strayangle")
+    # `<slug>-strayangle.json` holds the BACKWARD RANK. The forward confirm
+    # runs afterwards and writes the settled angle into params.json and the
+    # manifest -- so reading strayangle.json here reports the candidate rather
+    # than the measurement. For this example those differ (rank 17 deg,
+    # confirmed 16 deg), and the reduction differs by 16 percentage points
+    # between 15 and 16 deg, so the wrong file is not a cosmetic error.
+    #
+    # Also NOT J.load on the params file: that validates the job-manifest
+    # schema and rejects anything without `schema: straylight-job/1`. An
+    # earlier version called it inside a bare `except Exception`, so this whole
+    # section silently vanished and the clear ValueError naming the schema was
+    # swallowed. Plain JSON, narrow guard.
     sa_j = {}
-    if os.path.exists(apath):
+    ppath = os.path.join(wd, "%s-params.json" % m["slug"])
+    if os.path.exists(ppath):
         try:
-            with open(apath, encoding="utf-8-sig") as fh:
-                sa_j = json.load(fh)
+            with open(ppath, encoding="utf-8-sig") as fh:
+                p = json.load(fh)
+            sa_j = {"strayDeg": p.get("strayDeg"),
+                    "resolved": p.get("strayDegResolved"),
+                    "source": p.get("strayDegSource"),
+                    "maxFieldDeg": m.get("optics", {}).get("maxField")}
         except (OSError, ValueError) as exc:
-            print("\n  (stray-angle record present but unreadable: %s)" % exc)
+            print("\n  (params present but unreadable: %s)" % exc)
     if sa_j:
         print("\n  STRAY ANGLE")
         print("    measured at %.1f deg, off a %.0f deg design field"
               % (sa_j.get("strayDeg", 0), sa_j.get("maxFieldDeg", 0)))
-        if not sa_j.get("resolved", True):
-            print("    NOT RESOLVED -- the peak sits in the first bin the search")
-            print("    is allowed to consider (%.0f-%.0f deg), so it is the edge"
-                  % (sa_j.get("firstAdmissibleEdge", 0),
-                     sa_j.get("firstAdmissibleEdge", 0) + sa_j.get("binDeg", 0)))
-            print("    of the search window rather than a located maximum. This")
-            print("    is a REQUEST FOR A FORWARD SWEEP, not a fault, and it is")
-            print("    the common case -- three of the four bundled designs")
-            print("    carry it.")
-            if m["slug"] == SLUG:
-                # MEASURED, not asserted. The forward sweep was run for this
-                # example; publishing the outcome is more use to a reader than
-                # repeating the warning.
-                print("")
-                print("    For THIS example the sweep has been run. 15 deg is")
-                print("    confirmed as the worst angle for the naive tube --")
-                print("    the ranking was right. But the seated barrel's worst")
-                print("    RESIDUAL sits at 18 deg, where the benefit is -85.8%")
-                print("    rather than -95.6%. A redesign can move where the")
-                print("    remaining stray comes in, so the worst angle before")
-                print("    is not necessarily the worst angle after. See the")
-                print("    README section 'Where the stray peak moves'.")
+        print("    settled by: %s" % (sa_j.get("source") or "unknown"))
+        if sa_j.get("resolved"):
+            print("    CONFIRMED -- the backward trace ranked a candidate and a")
+            print("    forward sweep measured it. Both steps matter: the rank")
+            print("    bins at 2 deg and can only name odd angles, so an")
+            print("    even-angle peak is reachable only by the confirm.")
+        else:
+            print("    NOT RESOLVED -- the ranking could not settle the angle and")
+            print("    the forward confirm did not measure a decisive peak, so")
+            print("    treat this angle as a lower bound. That is a statement")
+            print("    about this design, not a fault in the tool.")
+            print("    Check the confirm actually RAN: there should be")
+            print("    confirm-result-*.txt beside the manifest, and the source")
+            print("    above should read 'inverse-trace+confirmed'.")
     return True
 
 

@@ -29,6 +29,47 @@ import subprocess
 LOCK = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
                     "ansys-seat", "seat.lock")
 
+# RE-ENTRANCY FOR DESCENDANTS OF THE HOLDER.
+#
+# `runner.py` takes the seat for a whole stage and then, inside that stage,
+# launches drivers that are themselves guarded -- confirm-angle.py above all.
+# Without re-entrancy the parent deadlocks its own child: the child asks for a
+# lock the parent is holding, is correctly refused, and dies.
+#
+# THAT IS NOT HYPOTHETICAL. It is what happened from the moment the guard was
+# added to all thirteen drivers until 2026-08-13. `confirm-angle.py` -- the
+# forward measurement that settles a boundary-censored stray angle -- raised
+# RuntimeError on EVERY fleet run, the runner caught it, and the message went
+# to lib/.stagelogs/confirm-angle.err.txt where nothing surfaced it. Every
+# system since then kept its unconfirmed ranked angle and reported
+# `resolved: false` -- not because the confirm found nothing, but because it
+# never executed. Four published designs were measured at a near-peak angle
+# and one headline figure was wrong by 16 percentage points.
+#
+# The marker is an ENVIRONMENT VARIABLE because that is inherited by child
+# processes and by nothing else, which is exactly the scope required: a
+# descendant of the holder may proceed, an unrelated process may not.
+OWNER_ENV = "SL_SEAT_OWNER_PID"
+
+
+def owned_by_ancestor():
+    """True if this process descends from the process that holds the lock.
+
+    Three conditions, all required. The marker must be present (so we are a
+    child of SOMETHING that took the seat); the lock file's pid must still
+    equal it (so the seat has not changed hands since we were spawned, which
+    would make the inherited marker a lie); and that holder must still be
+    alive. Checking only the marker would let a child sail past a lock now
+    owned by a different toolchain entirely.
+    """
+    owner = os.environ.get(OWNER_ENV)
+    if not owner:
+        return False
+    info = read_lock()
+    if info.get("pid") != owner:
+        return False
+    return lock_holder_alive(info)
+
 
 def _ps(cmd):
     return subprocess.run(["powershell", "-NoProfile", "-Command", cmd],
@@ -94,8 +135,15 @@ class SeatLock:
 
     def __init__(self, who):
         self.who = who
+        self.nested = False
 
     def __enter__(self):
+        # A descendant of the holder REUSES the seat rather than contending for
+        # it. It must not rewrite the lock file (that would steal ownership from
+        # its own parent) and must not remove it on exit.
+        if owned_by_ancestor():
+            self.nested = True
+            return self
         if os.path.exists(LOCK):
             info = read_lock()
             if lock_holder_alive(info):
@@ -116,9 +164,15 @@ class SeatLock:
                     % (os.getpid(), start,
                        datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                        self.who))
+        # Children spawned from here inherit this and may re-enter.
+        os.environ[OWNER_ENV] = str(os.getpid())
         return self
 
     def __exit__(self, *exc):
+        # A nested holder owns nothing and releases nothing. Removing the file
+        # here would hand the seat away while our own parent is still using it.
+        if self.nested:
+            return
         # Only ever remove OUR OWN lock. An unconditional remove would silently
         # unlock a star-stop run that had reclaimed it after we were reaped --
         # handing the seat to the next comer while a live process is mid-sweep.
@@ -128,3 +182,4 @@ class SeatLock:
             os.remove(LOCK)
         except OSError:
             pass
+        os.environ.pop(OWNER_ENV, None)

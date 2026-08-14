@@ -77,27 +77,26 @@ returns:
 
 | | |
 | --- | --- |
-| Stray flux, naive tube | 0.08802 W |
-| Stray flux, seated barrel | 0.00391 W |
-| Change | **−95.6% ± 1.3%** (75.1σ, decisive) |
+| Worst stray angle | 16°, forward-confirmed |
+| Stray flux, naive tube | 0.10957 W |
+| Stray flux, seated barrel | 0.02267 W |
+| Change | **−79.3% ± 1.3%**, decisive |
 | Imaging throughput | −0.4%, no significant change |
 
-If your figure is close to −95%, your installation is not merely running, it is
+If your figure is close to −79%, your installation is not merely running, it is
 producing the right answer.
 
-That −95.6% is measured at 15°, where the **baseline's** stray peaks. A forward
-sweep (below) later showed the redesigned system's worst residual sits at 18°
-instead, where the benefit is **−85.8%**. Both are true and neither is the
-"right" number on its own — see *Where the stray peak moves*. The imaging row is the one that makes the stray row
+The angle matters as much as the number. The backward trace *ranks* a candidate
+angle; a forward sweep then *measures* it. Here the rank was 17° and the
+measurement settles at 16° — and at 15°, one degree away, the same design reads
+−95.6%. Always quote the confirmed angle alongside the reduction. The imaging row is the one that makes the stray row
 mean anything: a barrel that simply blocked the lens would also remove stray
 light, so throughput has to survive.
 
-`--full` also reports the stray angle as **not resolved** for this example. That
-is expected and is not a fault: the worst-case angle sits in the first bin the
-search is permitted to consider, at the edge of the window rather than inside
-it, so the measured reduction is real while the *angle* is a lower bound. The
-pipeline says so rather than quietly picking a number, and you will see the same
-disclosure on your own designs when it applies.
+`--full` also reports how the angle was settled. For this example the backward
+trace ranks 17° and the forward confirm measures 16°; the run reports
+`inverse-trace+confirmed`. If a design of yours comes back **not resolved**,
+the ranking alone could not settle it — see *How the angle is settled*.
 
 The example is **generated, not shipped**: `lib/first-run-lens.ps1` builds an
 ordinary Cooke triplet — f/5, 50 mm focal length, ±14° field, catalog glasses —
@@ -107,10 +106,11 @@ example while containing no `.zmx` at all.
 
 ## The sample set — reproduce the range yourself
 
-One example makes a misleading advertisement. The triplet returns −95.6%, and
-the natural conclusion from a single data point is "this always gives you 95%."
-It does not, and the honest claim is the whole reason to run a simulation
-rather than consult a rule of thumb.
+One example makes a misleading advertisement. The triplet returns −79.3%, and
+the natural conclusion from a single data point is "this always gives you 80%."
+It does not — one of the four below shows no benefit at all — and the honest
+claim is the whole reason to run a simulation rather than consult a rule of
+thumb.
 
 ```bash
 python lib/make-samples.py
@@ -119,19 +119,22 @@ python lib/make-samples.py
 generates four designs and their manifests; `python lib/run-fleet.py` then runs
 them. **Measured on the reference machine, with the shipped synthetic BSDF:**
 
-| design | f/# | field | track | stray before | stray after | change | imaging |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `example-triplet` | f/5 | ±14° | 62 mm | 0.08802 W | 0.00391 W | **−95.6%** decisive † | −0.4% |
-| `wfov-30` | f/4 | ±30° | 38 mm | 0.06699 W | 0.05475 W | **−18.3%** decisive | −0.6% |
-| `fast-f2p5` | f/2.5 | ±10° | 65 mm | 0.03773 W | 0.03671 W | **−2.7%** barely significant (2.1σ) | −0.5% |
-| `longbore-f8` | f/8 | ±4° | 205 mm | 0.08126 W | 0.08068 W | **−0.7% — no change (0.6σ)** | +0.3% |
+| design | f/# | field | track | angle | stray before | stray after | change | imaging |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `example-triplet` | f/5 | ±14° | 62 mm | 16° | 0.10957 W | 0.02267 W | **−79.3%** decisive | −0.4% |
+| `wfov-30` | f/4 | ±30° | 38 mm | 30° | 0.07721 W | 0.06175 W | **−20.0%** decisive | −0.9% |
+| `fast-f2p5` | f/2.5 | ±10° | 65 mm | 15° | 0.03768 W | 0.03707 W | **−1.6% — not significant** | −0.2% |
+| `longbore-f8` | f/8 | ±4° | 205 mm | 4° | 0.41190 W | 0.41283 W | **+0.2% — no change** | −0.5% |
 
-All four carry the same ±1.3% Monte-Carlo uncertainty, so `fast-f2p5`'s −2.7% is
-only twice its own error bar, and **`longbore-f8` shows no effect at all**. That
-last row is the most useful thing in this table. A workflow that always reports
-a large improvement is a brochure; this one will tell you when the redesign is
-not worth building, and that verdict is worth more than a flattering number
-because it is the one that saves you the part.
+Every angle above is **forward-confirmed**, not merely ranked — see *How the
+angle is settled*. All four carry the same ±1.3% Monte-Carlo uncertainty, so
+`fast-f2p5`'s −1.6% does not clear its own error bar and **`longbore-f8` shows
+no effect at all**.
+
+Those last two rows are the most useful thing in this table. A workflow that
+always reports a large improvement is a brochure; this one will tell you when a
+redesign is not worth building, and that verdict is worth more than a
+flattering number because it is the one that saves you the part.
 
 The imaging column is what makes the stray column mean anything — a barrel that
 simply blocked the lens would also remove stray light. Throughput survives
@@ -147,47 +150,40 @@ tool exists. The author's own prediction before running these was that
 `longbore-f8`, a 205 mm tube at ±4°, would show the largest benefit. It came
 last.
 
-† `example-triplet` is measured at 15°; its worst *residual* angle is 18°, where
-the benefit is −85.8%. See below.
+### How the angle is settled
 
-Three of the four report their stray angle as **not resolved** — the peak sits
-in the first bin the search may consider, so it is the edge of the search
-window rather than a located maximum. That is disclosed rather than hidden, and
-you will meet the same disclosure on your own designs.
+A stray-light reduction is meaningless without the angle it was measured at,
+and finding that angle takes two steps.
 
-### Where the stray peak moves
+The **backward trace** ranks candidates cheaply: it traces rays out from the
+detector and histograms where they escape. It bins at 2°, so it can only ever
+report odd-numbered bin centres — an even-angle peak is unreachable by ranking
+alone. The **forward confirm** then measures: a short simulation at each top
+candidate, then a ±1° refinement around the winner.
 
-`resolved: false` is a **request for a forward sweep**, not a defect. We ran
-those sweeps on all three flagged designs — the seated geometry, seven angles
-each, plus a repeat angle for a run-to-run noise estimate:
+Ranked against confirmed, for the four bundled designs:
 
-| design | ranked | forward peak | flux at peak ÷ at ranked | repeat noise |
-| --- | --- | --- | --- | --- |
-| `wfov-30` | 31° | 31° | 1.00× | 0.5% |
-| `longbore-f8` | 5° | 5° | 1.00× | 0.1% |
-| `example-triplet` | 15° | **18°** | **2.94×** | 3.1% |
+| design | ranked | **confirmed** |
+| --- | --- | --- |
+| `example-triplet` | 17° | **16°** |
+| `wfov-30` | 31° | **30°** |
+| `longbore-f8` | 5° | **4°** |
+| `fast-f2p5` | 15° | **15°** |
 
-Two confirm exactly. The third is the interesting one, and it is **not** a case
-of the selector picking a wrong angle — a baseline sweep over the same angles
-shows the *naive tube's* stray peaks at 15°, precisely where it was ranked:
+Three of four moved by a degree, and a degree is not a rounding detail:
+`example-triplet` reads −79.3% at its confirmed 16° and −95.6% at 15°.
+`longbore-f8` carries **five times** the stray flux at 4° that it does at 5°.
+Whenever a run reports its angle as **not resolved**, it is telling you the
+ranking alone could not settle it — that is a request for the forward
+measurement, not a defect, and the runner performs it automatically.
 
-| angle | naive tube | seated barrel | reduction |
-| --- | --- | --- | --- |
-| **15°** | **0.0882 W** ← baseline peaks | 0.00385 W | **−95.6%** |
-| **18°** | 0.0795 W | **0.0113 W** ← residual peaks | **−85.8%** |
-| 22° | 0.0393 W | 0.00721 W | −81.6% |
-| 26° | 0.0199 W | 0.000265 W | −98.7% |
-
-**The redesign moves where the residual comes in.** The barrel is extremely
-effective at 15° and less so at 18°, so the worst remaining stray after the
-redesign is not at the angle that was worst before it. Quote −95.6% as the
-reduction at the baseline's worst angle, and −85.8% as the benefit at the
-redesigned system's worst angle. The second is the more conservative number and
-the more useful one if you are sizing a margin.
-
-This generalises, and it is worth knowing before you trust any single-angle
-result: **the worst angle before a redesign is not necessarily the worst angle
-after it.** That is exactly what `resolved: false` exists to make you check.
+**Check it actually ran.** The confirm leaves `confirm-result-*.txt` in the job
+folder, and the manifest records `strayDegSource` as
+`inverse-trace+confirmed`. If those are missing, the angle is a ranking and
+nothing more. This matters because the confirm was silently failing here for
+several days — the runner held the licence seat and the confirm, being guarded
+by the same lock, deadlocked against its own parent. Every number in the table
+above predates the fix and has been re-measured since.
 
 ## How much does the wall model move the answer?
 
@@ -217,17 +213,14 @@ The headline reduction is a **ratio** of two runs sharing the same walls, so it
 should be far more stable than either absolute flux. That was a hypothesis.
 Measured across the four sample designs:
 
-| design | field | low (TIS 12.5%) | mid (shipped) | high (TIS 50%) | spread |
-| --- | --- | --- | --- | --- | --- |
-| `example-triplet` ‡ | ±14° | −96.5% | −95.6% | −94.3% | 2.2 pp |
-| `wfov-30` | ±30° | −12.7% | −18.3% | −25.5% | **12.7 pp** |
-| `fast-f2p5` | ±10° | −2.4% | −2.7% | −2.7% | 0.3 pp |
-| `longbore-f8` | ±4° | −1.4% | −0.7% | −0.4% | 0.9 pp |
+Each design is banded **at its own forward-confirmed angle**:
 
-‡ Each design's band is measured at its own ranked angle, so
-`example-triplet`'s band is the spread at 15°. The band and the angle are
-independent questions; the 18° residual peak discussed above has not been
-banded.
+| design | angle | low (TIS 12.5%) | mid (shipped) | high (TIS 50%) | spread |
+| --- | --- | --- | --- | --- | --- |
+| `example-triplet` | 16° | −86.6% | −79.3% | −70.4% | **16.2 pp** |
+| `wfov-30` | 30° | −15.7% | −20.0% | −26.1% | 10.5 pp |
+| `fast-f2p5` | 15° | −2.1% | −1.6% | −2.4% | 0.8 pp |
+| `longbore-f8` | 4° | −0.1% | +0.2% | −0.3% | 0.5 pp |
 
 Reproduce it — both band models ship, so this needs nothing else:
 
@@ -235,30 +228,30 @@ Reproduce it — both band models ship, so this needs nothing else:
 python run-bsdf-band.py --samples
 ```
 
-**The hypothesis holds.** A fourfold swing in wall reflectance moves the
-reduction by 0.3 to 12.7 pp, on benefits spanning −0.7% to −95.6%, and for
-three of the four designs the *conclusion* does not change at all:
+**The hypothesis holds, but less comfortably than a single design suggests.** A
+fourfold swing in wall reflectance moves the reduction by 0.5 to 16.2 pp, and
+no design's *conclusion* changes across the span:
 
-- `example-triplet` stays decisively beneficial at every wall model (2.2 pp).
-- `wfov-30` stays decisively beneficial, but the **size** of the benefit
-  roughly doubles across the span, −12.7% to −25.5%. This is the caveat case:
-  quote it as "−18%, and between −13% and −26% depending on your surface
-  finish", never as a bare number. Wide fields have moved most throughout this
-  work.
-- **`longbore-f8` is null at every wall model** — not statistically significant
-  at any of the three. "This design does not benefit from vanes" survives a
-  fourfold reflectance swing, which makes it a far stronger recommendation than
-  a single run could support.
-- `fast-f2p5` is the one whose verdict shifts, clearing significance at two of
-  three wall models. What changes is "marginal" versus "negligible" — every
-  value sits between −2.4% and −2.7% — so nothing anyone would act on
-  differently.
+- `example-triplet` stays decisively beneficial, but over a wide range:
+  −70.4% to −86.6%. Quote it as "−79%, between −70% and −87% depending on your
+  surface finish", never bare.
+- `wfov-30` likewise, −15.7% to −26.1%.
+- **`fast-f2p5` and `longbore-f8` are null at every wall model** — neither
+  clears significance at any of the three. "This design does not benefit from
+  vanes" surviving a fourfold reflectance swing is a far stronger
+  recommendation than a single run could support, and it is *half this set*.
 
-The direction is **not** consistent: worse walls give `wfov-30` and `fast-f2p5`
-*more* benefit and `example-triplet` and `longbore-f8` *less*. Four points is
-far too few to build a rule on, and this project has already refuted five
-plausible-looking predictors of exactly this kind, so it is recorded as an
-observation and nothing is inferred from it.
+The direction is **not** consistent: worse walls give `wfov-30` more benefit
+and `example-triplet` less. Four points is far too few to build a rule on, and
+this project has already refuted several plausible-looking predictors of
+exactly this kind, so it is recorded as an observation and nothing is inferred.
+
+**A caution about measuring the band at the wrong angle.** These figures
+replace an earlier set taken at the pre-confirmation angles, and the change is
+not small: `example-triplet` measured **2.2 pp** of spread at 15° and **16.2
+pp** at its true 16°. Measuring one degree off understated its sensitivity to
+the wall model sevenfold. The angle is not a detail you can settle later — it
+determines the uncertainty as much as the result.
 
 All four spreads fall inside the 0.2–28.6 pp band this README quotes from the
 development corpus, so that figure is now corroborated by designs you can run
