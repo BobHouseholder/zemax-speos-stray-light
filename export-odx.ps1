@@ -4,16 +4,15 @@
 #   ZOSAPI.Tools.IOpticalSystemTools.OpenExportToSpeosWhitebox  -> .odx (full geometry)
 #   (OpenExportToSpeosLensSystem is the .OPTDistortion ROM -- not this workflow)
 param(
-    [string]$LensFile = "C:\Users\<user>\Dropbox\Optics\stray-light-loop\Double Gauss 28 degree field.zmx"
+    [string]$LensFile = ""
 )
 
-$ZemaxDir = "C:\Program Files\Ansys Zemax OpticStudio 2026 R1.00"
-Add-Type -Path (Join-Path $ZemaxDir "ZOSAPI_NetHelper.dll")
-if (-not [ZOSAPI_NetHelper.ZOSAPI_Initializer]::Initialize($ZemaxDir)) {
-    throw "ZOSAPI_Initializer failed for $ZemaxDir"
+if (-not $LensFile) {
+    throw "export-odx.ps1 needs -LensFile <path.zmx>"
 }
-[void][System.Reflection.Assembly]::LoadFrom((Join-Path $ZemaxDir "ZOSAPI.dll"))
-[void][System.Reflection.Assembly]::LoadFrom((Join-Path $ZemaxDir "ZOSAPI_Interfaces.dll"))
+
+. "$PSScriptRoot\lib\settings.ps1"
+Import-ZOSAPI
 
 $conn = New-Object ZOSAPI.ZOSAPI_Connection
 $app = $conn.CreateNewApplication()
