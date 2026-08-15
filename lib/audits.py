@@ -87,9 +87,48 @@ def staleness(m):
             continue
         name, newest = max(ins, key=lambda x: x[1])
         if newest > sim + FRESH_SLACK_S:
+            # mtime is a PROXY for "the geometry changed after the sim measured
+            # it". Where the manifest recorded a content hash for this input and
+            # it still matches, the proxy is simply wrong: a restore, a `cp -p`,
+            # an archive extraction or a checkout all set a fresh mtime on
+            # identical bytes. Observed: restoring a byte-identical .odx BLOCKED
+            # a job whose hash matched the manifest to the digit. Downgrade to
+            # WARN there -- the ordering is still worth saying out loud, but it
+            # is not grounds to refuse the numbers.
+            if _content_matches(m, wd, name):
+                return WARN, ("%s sim is %.0f h older than %s, but its recorded "
+                              "content hash still matches -- mtime only"
+                              % (variant, (newest - sim) / 3600.0, name))
             return BLOCK, "%s sim is %.0f h older than %s" % (
                 variant, (newest - sim) / 3600.0, name)
     return OK, ""
+
+
+def _content_matches(m, wd, name):
+    """Does `name` still hash to what some stage's provenance recorded?
+
+    Returns False when nothing recorded it -- absence of evidence must not
+    downgrade a BLOCK, or the guard weakens exactly where it knows least.
+    """
+    import hashlib
+
+    want = None
+    for rec in (m.get("stages") or {}).values():
+        got = ((rec.get("provenance") or {}).get("inputs") or {}).get(name)
+        if got:
+            want = got
+            break
+    if not want:
+        return False
+    p = os.path.join(wd, name)
+    if not os.path.exists(p):
+        return False
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    now = h.hexdigest()[:12]
+    return now == want[:len(now)] or want[:12] == now
 
 
 def fieldmap(m):
@@ -163,8 +202,53 @@ def codeversion(m):
     return OK, ""
 
 
+def inputdrift(m):
+    """Are the DATA inputs still the ones each stage consumed?
+
+    `job.provenance()` has hashed every stage's inputs from the beginning and
+    nothing ever compared them -- the same gap `codeversion` above closed for
+    scripts, left open for the .odx and .step files the simulations actually
+    measure. `staleness` covers the same ground with MTIMES, which is wrong in
+    both directions: it misses any content change that lands with an older
+    timestamp (a restore, a `cp -p`, an archive extraction, a checkout), and it
+    BLOCKS on a byte-identical restore because `cp` sets a fresh mtime. The
+    hash answers the question mtime was standing in for.
+
+    WARN, not BLOCK, and deliberately: an .odx re-exported from an unchanged
+    lens hashes differently every time (the format embeds fresh GUIDs per
+    entity), so a changed hash is not by itself proof the geometry moved. It
+    names the file and the stage and stops there -- same judgement call as
+    `codeversion`, same reason.
+    """
+    import hashlib
+
+    def sha(p):
+        if not os.path.exists(p):
+            return None
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()[:12]
+
+    wd = m["workdir"]
+    drifted = []
+    for stage, rec in sorted((m.get("stages") or {}).items()):
+        for name, was in ((rec.get("provenance") or {}).get("inputs") or {}).items():
+            p = os.path.join(wd, name)
+            if not os.path.exists(p):
+                continue
+            now = sha(p)
+            if now and was and now != was[:len(now)] and was[:12] != now:
+                drifted.append("%s@%s (%s -> %s)" % (name, stage, was[:8], now[:8]))
+    if drifted:
+        return WARN, "input changed since the stage ran: " + "; ".join(drifted[:3])
+    return OK, ""
+
+
 CHECKS = [("provenance", provenance), ("staleness", staleness),
-          ("fieldmap", fieldmap), ("codeversion", codeversion)]
+          ("fieldmap", fieldmap), ("codeversion", codeversion),
+          ("inputdrift", inputdrift)]
 
 
 def audit(m):
