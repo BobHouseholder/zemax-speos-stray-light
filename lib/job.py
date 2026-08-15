@@ -92,6 +92,14 @@ def path_for(slug, workdir, kind, variant=None):
         "mech_base": os.path.join(workdir, "%s-baseline.step" % slug),
         "mech_seat": os.path.join(workdir, "%s-seated.step" % slug),
         "s0":        os.path.join(workdir, "%s-s0.json" % slug),
+        # double-bounce ghost minimisation (opt-in). The optimised lens is a
+        # SEPARATE file on purpose: repointing the job's own `lens` would
+        # silently change what every downstream stray-light number refers to.
+        # To measure the ghost-optimised design, stage `<slug>-ghost.zmx` as its
+        # own job and run the fleet on it -- then the comparison is two jobs
+        # through one pipeline rather than one job that quietly changed.
+        "ghostopt":   os.path.join(workdir, "%s-ghostopt.json" % slug),
+        "lens_ghost": os.path.join(workdir, "%s-ghost.zmx" % slug),
         # the measured stray angle from the optics-only backward trace
         "strayangle": os.path.join(workdir, "%s-strayangle.json" % slug),
         "speosdoc":  os.path.join(workdir, "%s-speos.scdocx" % slug),

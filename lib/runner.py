@@ -345,6 +345,34 @@ def st_mech(m, wd, slug):
     return outs, [script], [lay], dt
 
 
+def st_ghost_opt(m, wd, slug):
+    """Minimise double-bounce ghost focus on a COPY of the lens. OPT-IN.
+
+    Off unless the manifest carries `ghost: {"optimise": true}`. It is off by
+    default because it produces a DIFFERENT lens, and a stage that silently
+    changes the optics would change what every stray-light number downstream
+    means without changing its name.
+
+    It also does not repoint `m["lens"]`. The optimised design is measured by
+    staging `<slug>-ghost.zmx` as its own job -- two jobs through one pipeline,
+    which is comparable, rather than one job whose input moved.
+    """
+    if not (m.get("ghost") or {}).get("optimise"):
+        return [], [], [], 0.0
+    out = J.path_for(slug, wd, "ghostopt")
+    script = os.path.join(BASE, "ghost", "ghost-optimise.ps1")
+    g = m.get("ghost") or {}
+    cmd = PS + [script, "-LensFile", m["lens"], "-OutJson", out, "-Slug", slug,
+                "-TopN", str(g.get("topN", 3)),
+                "-GhostWeight", str(g.get("weight", 1.0)),
+                "-DenseFields", str(g.get("denseFields", 11))]
+    p, dt = run(cmd, 1800, "ghost_opt", needs_seat=True)
+    assert_file(out, "ghost optimisation")
+    load_json_checked(out, "ghost optimisation")
+    assert_file(J.path_for(slug, wd, "lens_ghost"), "ghost-optimised lens")
+    return ([out, J.path_for(slug, wd, "lens_ghost")], [script], [m["lens"]], dt)
+
+
 def st_s0(m, wd, slug):
     out = J.path_for(slug, wd, "s0")
     script = os.path.join(BASE, "ghost", "s0-ghosts.ps1")
@@ -709,6 +737,11 @@ STAGES = [
     # angle and every expensive stage after it.
     ("angle_gate", st_angle_gate, []),
     ("s0",        st_s0,        ["s0"]),
+    # OPT-IN, and a no-op unless the manifest sets ghost.optimise. Placed after
+    # s0 because s0's exhaustive GPIM enumeration is the "before" picture this
+    # stage is judged against, and before the sim stages so the optimised lens
+    # exists by the time anyone wants to stage it as its own job.
+    ("ghost_opt", st_ghost_opt, ["ghostopt", "lens_ghost"]),
     # optics-only first: it is the DENOMINATOR both sim variants are measured
     # against, and running it up front means a system whose per-field source
     # does not couple is visible before either mechanics run costs ~150 s.
@@ -716,6 +749,13 @@ STAGES = [
     ("sim_base",  st_sim_base,  []),
     ("sim_redesign", st_sim_redesign, []),
 ]
+
+# Stages that only exist when the manifest asks for them. Keyed by stage name;
+# the predicate reads the manifest. An opt-in stage is skipped entirely rather
+# than run as a no-op, so it never appears in a summary it did no work for.
+OPTIONAL = {
+    "ghost_opt": lambda m: bool((m.get("ghost") or {}).get("optimise")),
+}
 
 
 # What each stage CONSUMES. A stage whose output predates any of these is
@@ -839,6 +879,11 @@ def _loop(m, slug, wd, force, only, a):
     rc = 0
     for name, fn, kinds in STAGES:
         if only and name not in only:
+            continue
+        # OPT-IN stages vanish entirely when not enabled, rather than running
+        # and recording a no-op. A stage that reports "ok" having done nothing
+        # is indistinguishable in the summary from one that worked.
+        if name in OPTIONAL and not OPTIONAL[name](m):
             continue
         done = outputs_exist(m, slug, wd, kinds, name) and name not in force
         if a.dry_run:
