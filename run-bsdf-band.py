@@ -35,6 +35,7 @@ import time
 BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE, "lib"))
 import job as J  # noqa: E402
+import report_read  # noqa: E402
 import pst_read  # noqa: E402
 import seat  # noqa: E402
 import settings  # noqa: E402
@@ -120,16 +121,82 @@ if "--highgraze" in sys.argv:
 # particular BSDF, and only one of those answers is safe to publish.
 SAMPLES = [
     ("example-triplet", os.path.join(BASE, "survey", "systems", "example-triplet",
-                                     "example-triplet.job.json"), -95.6),
+                                     "example-triplet.job.json")),
     ("wfov-30", os.path.join(BASE, "survey", "systems", "wfov-30",
-                             "wfov-30.job.json"), -18.3),
+                             "wfov-30.job.json")),
     ("fast-f2p5", os.path.join(BASE, "survey", "systems", "fast-f2p5",
-                               "fast-f2p5.job.json"), -2.7),
+                               "fast-f2p5.job.json")),
     ("longbore-f8", os.path.join(BASE, "survey", "systems", "longbore-f8",
-                                 "longbore-f8.job.json"), -0.7),
+                                 "longbore-f8.job.json")),
 ]
 if "--samples" in sys.argv:
     SYSTEMS = SAMPLES
+
+
+# ---- reading results back, so no number in this file is a literal ----------
+# The four SAMPLES entries used to carry a hardcoded "shipped-BSDF result" each.
+# They were the PRE-CONFIRMATION-ANGLE values: c93073b re-measured every
+# published number at a forward-confirmed angle, touched README.md,
+# lib/first-run.py, lib/runner.py and lib/seat.py, and missed this file -- the
+# second repo-wide sweep to skip it, for the same reason recorded at the top of
+# this file (it sits at the repo root). A literal that a sweep can miss is a
+# literal that will be missed again, so the value is read back instead.
+def _mid(mpath):
+    """(before, after, kpi-comparison) for the shipped BSDF, from the artifacts."""
+    try:
+        m = J.load(mpath)
+    except Exception:                                          # noqa: BLE001
+        return None
+    sb, sa = report_read.stray_pair(m["workdir"], m["simPrefix"])
+    c = report_read.change_pct(sb, sa, what=m["slug"])
+    return None if c is None else (sb, sa, c)
+
+
+def _mid_str(mpath):
+    r = _mid(mpath)
+    return "not yet measured" if r is None else "%+.1f%%" % r[2]["delta_pct"]
+
+
+def report_band():
+    """Print the low/mid/high/spread table the README promises.
+
+    run-bsdf-band.py ran the 16 simulations and stopped, so the table the README
+    presents as reproducible by one command could not actually be obtained --
+    the .Report.html files landed under the band simPrefix and nothing read
+    them. Extraction and significance come from lib/report_read.py, which is
+    analyze-fleet.py's own code, so this table and the fleet table cannot
+    disagree about what a flux is.
+    """
+    print("=" * 78)
+    print("WALL-BSDF BAND -- reduction at each reflectance level")
+    print("=" * 78)
+    print("%-16s %5s %9s %9s %9s %9s" % ("design", "angle", "low", "mid", "high", "spread"))
+    print("-" * 78)
+    rows = 0
+    for entry in SYSTEMS:
+        slug, mpath = entry[0], entry[1]
+        if not os.path.exists(mpath):
+            print("%-16s  (no manifest)" % slug)
+            continue
+        m = J.load(mpath)
+        wd, pre = m["workdir"], m["simPrefix"]
+        vals = {}
+        for tag in ("low", "", "high"):
+            sb, sa = report_read.stray_pair(wd, pre + tag)
+            c = report_read.change_pct(sb, sa, what=slug)
+            vals[tag or "mid"] = None if c is None else c["delta_pct"]
+        got = [v for v in vals.values() if v is not None]
+        spread = (max(got) - min(got)) if len(got) == 3 else None
+        f = lambda v: "  MISSING" if v is None else "%+.1f%%" % v
+        print("%-16s %4.0f%s %9s %9s %9s %9s"
+              % (slug, m["sim"].get("strayDeg") or 0, chr(176),
+                 f(vals["low"]), f(vals["mid"]), f(vals["high"]),
+                 "n/a" if spread is None else "%.1f pp" % spread))
+        rows += 1
+    print("-" * 78)
+    print("  %d design(s) reported. Each is banded AT ITS OWN forward-confirmed" % rows)
+    print("  angle: measuring one degree off understated example-triplet's wall")
+    print("  sensitivity sevenfold (2.2 pp at 15 deg against 16.2 pp at 16 deg).")
 
 
 def run_one(mpath, variant, bsdf, tag, dry):
@@ -173,6 +240,10 @@ def run_one(mpath, variant, bsdf, tag, dry):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--report", action="store_true",
+                    help="print the low/mid/high/spread table from results "
+                         "already on disk and exit -- the step the README's "
+                         "reproduce instruction was missing")
     ap.add_argument("--wide", action="store_true",
                     help="run the wide-field extension set instead")
     ap.add_argument("--samples", action="store_true",
@@ -185,14 +256,18 @@ def main():
                          "correlation holds beyond the 49-59 deg it was "
                          "measured over")
     a = ap.parse_args()
+    if a.report:
+        report_band()
+        return
     for tag, bsdf in BANDS:
         if not os.path.exists(bsdf):
             sys.exit("missing %s - run make-bsdf-band.py first" % bsdf)
-    for slug, mpath, mid_pct in SYSTEMS:
+    for entry in SYSTEMS:
+        slug, mpath = entry[0], entry[1]
         if not os.path.exists(mpath):
             print("SKIP %s (no manifest)" % slug)
             continue
-        print("%s  (shipped-BSDF result: %+.1f%%)" % (slug, mid_pct))
+        print("%s  (shipped-BSDF result: %s)" % (slug, _mid_str(mpath)))
         for tag, bsdf in BANDS:
             for variant in ("base", "redesign"):
                 run_one(mpath, variant, bsdf, tag, a.dry_run)

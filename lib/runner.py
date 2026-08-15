@@ -532,6 +532,14 @@ def st_back_trace(m, wd, slug):
             json.dump(prm, f, indent=1)
         m["sim"]["strayDeg"] = prm["strayDeg"]
         m["sim"]["strayDegResolved"] = prm["strayDegResolved"]
+        # README's "check it actually ran" instruction tells the reader to look
+        # for `strayDegSource` IN THE MANIFEST, and it lived only in
+        # <slug>-params.json -- so following the documented check on a fully
+        # confirmed angle found nothing and, by the README's own words, meant
+        # "the angle is a ranking and nothing more". A false alarm on the one
+        # check guarding the failure mode that already cost a full re-measure.
+        # Carried here so the documented check works where it is documented.
+        m["sim"]["strayDegSource"] = prm.get("strayDegSource")
         print("      stray angle FINAL %.1f deg [%s]%s"
               % (prm["strayDeg"], prm.get("strayDegSource"),
                  "" if prm["strayDegResolved"]
