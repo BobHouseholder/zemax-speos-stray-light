@@ -50,6 +50,16 @@ param(
     # the thing it is meant to bound is decorative, which is the same defect
     # class as the unnormalised weights this file already documents.
     [double]$EfflWeight = 1000.0,
+    # The imaging BEAM must not grow against the element rims that set the
+    # barrel bore. survey/make-survey-mech.py fits "bore" and "ring" sections to
+    # the element rim and explicitly refuses to grow them ("widening them breaks
+    # the seat"), so a design whose beam swells inside an unchanged rim produces
+    # a barrel that obstructs its own imaging beam -- runner.py then HALTS with
+    # `mech envelope FAILS by N mm`. That is exactly what happened to fast-f2p5:
+    # all four optical gates passed and the design was unmeasurable end to end.
+    # Holding real ray heights at their baseline keeps the beam inside the rims
+    # the mechanics will be cut to.
+    [double]$EnvelopeWeight = 100.0,
     [switch]$VaryThickness          # also vary airspaces, not just curvatures
 )
 
@@ -68,6 +78,7 @@ $GPIM = [Enum]::Parse($TOPT, "GPIM")
 $EFFL = [Enum]::Parse($TOPT, "EFFL")
 $RSCE = [Enum]::Parse($TOPT, "RSCE")
 $TOTR = [Enum]::Parse($TOPT, "TOTR")
+$REAY = [Enum]::Parse($TOPT, "REAY")
 $P1 = [Enum]::Parse($TCOL,"Param1"); $P2 = [Enum]::Parse($TCOL,"Param2"); $P3 = [Enum]::Parse($TCOL,"Param3")
 
 # ---- work on a COPY, always (task b)
@@ -117,6 +128,13 @@ try {
     function Get-Gpim([int]$s1, [int]$s2, [int]$mode) {
         [double]$mfe.GetOperandValue($GPIM, $s1, $s2, $mode, 0,0,0,0,0)
     }
+    # Extreme rays of the imaging beam -- axial marginal and full-field upper /
+    # lower marginal. These three bound the meridional envelope at a surface,
+    # which is the quantity the bore is cut against.
+    $ENV_RAYS = @(@(0.0,1.0), @(1.0,1.0), @(1.0,-1.0))
+    function Get-Reay([int]$s, [double]$hy, [double]$py) {
+        [double]$mfe.GetOperandValue($REAY, $s, $wave, 0.0, $hy, 0.0, $py, 0, 0)
+    }
 
     # dense field grid -- the VERIFICATION domain, wider than what is constrained
     $denseHy = @()
@@ -153,7 +171,18 @@ try {
         return $g
     }
 
+    function Measure-Envelope {
+        $e = @()
+        foreach ($s in $interfaces) {
+            foreach ($r in $ENV_RAYS) {
+                $e += ,@{ surf = $s; hy = $r[0]; py = $r[1]; y = (Get-Reay $s $r[0] $r[1]) }
+            }
+        }
+        return $e
+    }
+
     $ghostsBefore = Measure-Ghosts
+    $envBefore = Measure-Envelope
     $fieldsBefore = Measure-Fields
     $efflBefore = Get-Effl
     $totrBefore = Get-Totr
@@ -211,6 +240,15 @@ try {
             $r.GetOperandCell($P2).IntegerValue = 0
             $r.GetOperandCell([Enum]::Parse($TCOL,"Param4")).DoubleValue = $f.hy
             $r.Target = $f.spot; $r.Weight = (Norm $f.spot 1.0)
+        }
+        # hold the imaging beam inside the rims the barrel will be cut to
+        foreach ($e in $envBefore) {
+            $r = $mfe.AddOperand(); [void]$r.ChangeType($REAY)
+            $r.GetOperandCell($P1).IntegerValue = $e.surf
+            $r.GetOperandCell($P2).IntegerValue = $wave
+            $r.GetOperandCell([Enum]::Parse($TCOL,"Param4")).DoubleValue = $e.hy
+            $r.GetOperandCell([Enum]::Parse($TCOL,"Param6")).DoubleValue = $e.py
+            $r.Target = $e.y; $r.Weight = (Norm $e.y $EnvelopeWeight)
         }
         [void]$mfe.CalculateMeritFunction()
         $mfOrigBefore = [double]$mfe.CalculateMeritFunction()
@@ -277,6 +315,7 @@ try {
 
     # ---- re-measure EVERYTHING outside the optimiser
     $ghostsAfter = Measure-Ghosts
+    $envAfter = Measure-Envelope
     $fieldsAfter = Measure-Fields
     $efflAfter = Get-Effl
     $totrAfter = Get-Totr
@@ -290,6 +329,13 @@ try {
             $v = $_.v
             $vs = if ([double]::IsNaN($v)) { "null" } else { "$v" }
             '{{"surf1":{0},"surf2":{1},"mode":{2},"value":{3}}}' -f $_.s1, $_.s2, $_.mode, $vs
+        }) -join ","
+    }
+    function E-Json($rows) {
+        ($rows | ForEach-Object {
+            $v = $_.y
+            $vs = if ([double]::IsNaN($v)) { "null" } else { "$v" }
+            '{{"surf":{0},"hy":{1},"py":{2},"y":{3}}}' -f $_.surf, $_.hy, $_.py, $vs
         }) -join ","
     }
     function F-Json($rows) {
@@ -318,6 +364,9 @@ try {
      ',"denseFields":' + $DenseFields +
      ',"fieldsBefore":[' + (F-Json $fieldsBefore) + ']' +
      ',"fieldsAfter":[' + (F-Json $fieldsAfter) + ']' +
+     ',"envelopeWeight":' + $EnvelopeWeight +
+     ',"envelopeBefore":[' + (E-Json $envBefore) + ']' +
+     ',"envelopeAfter":[' + (E-Json $envAfter) + ']' +
      ',"ghostsBefore":[' + (G-Json $ghostsBefore) + ']' +
      ',"ghostsAfter":[' + (G-Json $ghostsAfter) + ']}') | Out-File -Encoding utf8 $OutJson
     Stage "wrote     : $OutJson"
