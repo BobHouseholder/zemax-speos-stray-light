@@ -89,6 +89,10 @@ def main():
     ap.add_argument("--vary-thickness", action="store_true")
     ap.add_argument("--max-spot-growth", type=float, default=10.0,
                     help="percent; image quality beyond this is a failure")
+    ap.add_argument("--max-beam-growth", type=float, default=1.15,
+                    help="reject if the imaging beam grows by more than this "
+                         "factor at any interface; 1.15 sits in the measured "
+                         "gap between safe designs and the one that blew up")
     a = ap.parse_args()
 
     if not a.lens and not a.slug:
@@ -176,7 +180,47 @@ def main():
         failures.append("spot grew %+.1f%% at hy=%.2f (limit %.0f%%)"
                         % (wg, hy[wi], a.max_spot_growth))
 
-    # ---- gate 4: design integrity
+    # ---- gate 4: beam growth. THE ONE THAT CATCHES A CATASTROPHE.
+    #
+    # A design can pass every optical gate AND the mech envelope check and still
+    # be ruinous. Measured at EnvelopeWeight 0:
+    #
+    #   longbore-f8      growth 1.008x   end-to-end  -54.4%
+    #   wfov-30          growth 1.024x   end-to-end   +9.8%
+    #   example-triplet  growth 1.077x   end-to-end  -35.2%
+    #   fast-f2p5        growth 1.487x   end-to-end +680.2%   <-- 8x MORE stray
+    #
+    # fast-f2p5 passed the optical gates and passed mech, and its stray flux
+    # went from 0.03777 W to 0.29470 W. Using mech pass/fail as the watchdog is
+    # what let that through: a barrel can accommodate a swollen beam without
+    # obstructing it, and the extra beam then lights up the bore. The quantity
+    # that mattered was never mech's verdict, it was how much the beam grew.
+    #
+    # The threshold sits in the measured gap (1.08 -> 1.49), not on a round
+    # number. It is a REJECTION, not a warning: this is the only gate here that
+    # has been shown to separate a large win from a large loss.
+    #
+    # It does NOT make the tool safe on its own. wfov-30 grows only 1.024x and
+    # still ends up 9.8% worse, and no optical quantity measured here predicts
+    # that. The end-to-end stray measurement remains the acceptance test.
+    eb = {(e["surf"], e["hy"], e["py"]): e["y"] for e in d.get("envelopeBefore", [])}
+    growth = None
+    for e in d.get("envelopeAfter", []):
+        was = eb.get((e["surf"], e["hy"], e["py"]))
+        if was:
+            g = abs(e["y"]) / abs(was)
+            growth = g if growth is None else max(growth, g)
+    if growth is not None:
+        print("  imaging beam growth (max over every interface)")
+        print("    %.4fx   limit %.2fx   %s"
+              % (growth, a.max_beam_growth,
+                 "ok" if growth <= a.max_beam_growth else "REJECTED"))
+        if growth > a.max_beam_growth:
+            failures.append("imaging beam grew %.3fx (limit %.2fx) -- a design "
+                            "this swollen measured +680%% stray end-to-end"
+                            % (growth, a.max_beam_growth))
+
+    # ---- gate 5: design integrity
     de = pct(d["efflBefore"], d["efflAfter"])
     dt = pct(d["totrBefore"], d["totrAfter"])
     dm = pct(d["meritOriginalBefore"], d["meritOriginalAfter"])
