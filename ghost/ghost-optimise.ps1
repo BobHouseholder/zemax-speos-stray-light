@@ -41,6 +41,15 @@ param(
     [int]$TopN = 3,                 # how many image ghosts to drive
     [double]$GhostWeight = 1.0,     # weight on each injected GPIM operand
     [int]$DenseFields = 11,         # verification grid across the field
+    # Focal length is a HARD constraint, and 10.0 was not hard enough. At the
+    # default ghost weight, a 3.85% EFFL drift costs ~0.015 of relative merit
+    # while the ghost gain is worth ~0.85, so the optimiser sells focal length
+    # for ghosts every time: longbore-f8 drifted -3.85% and fast-f2p5 -1.68%,
+    # and in both cases EFFL was the ONLY failing gate -- the ghosts improved
+    # -61.0% and -12.7% with image quality intact. A constraint that loses to
+    # the thing it is meant to bound is decorative, which is the same defect
+    # class as the unnormalised weights this file already documents.
+    [double]$EfflWeight = 1000.0,
     [switch]$VaryThickness          # also vary airspaces, not just curvatures
 )
 
@@ -191,7 +200,7 @@ try {
         $r = $mfe.AddOperand(); [void]$r.ChangeType($EFFL)
         $r.GetOperandCell($P1).IntegerValue = 1
         $r.GetOperandCell($P2).IntegerValue = $wave
-        $r.Target = $efflBefore; $r.Weight = (Norm $efflBefore 10.0)
+        $r.Target = $efflBefore; $r.Weight = (Norm $efflBefore $EfflWeight)
         # hold overall length
         $r = $mfe.AddOperand(); [void]$r.ChangeType($TOTR)
         $r.Target = $totrBefore; $r.Weight = (Norm $totrBefore 1.0)
