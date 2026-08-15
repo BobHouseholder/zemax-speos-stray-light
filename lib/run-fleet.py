@@ -126,7 +126,20 @@ def main():
                           s.get("error", "").split("\n")[0][:110]))
         except Exception:
             pass
-    return 0
+    # PROPAGATE the verdict this function already computed. Returning 0 here
+    # unconditionally made every caller's exit-code check useless, and the
+    # summary two lines up disagreed with the process status in the same run:
+    # a fresh clone halted at odx, printed "0/1 jobs completed cleanly", and
+    # exited 0 -- so lib/first-run.py, which correctly gates on `rc == 0`, went
+    # on to print "FIRST RUN OK -- the loop closed end to end" over a run that
+    # simulated nothing. Anything wrapping this in CI failed open.
+    #
+    # 2, not 1, to match the per-job convention in this module's docstring.
+    # Note a preflight NO-GO also reaches here as a non-zero job exit: that IS
+    # a correct outcome for an unsupported design, and the distinction is made
+    # by READING THE VERDICT (first-run.py does exactly that), not by the fleet
+    # pretending every run succeeded.
+    return 2 if bad else 0
 
 
 if __name__ == "__main__":
