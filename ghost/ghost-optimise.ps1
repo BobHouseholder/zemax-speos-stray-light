@@ -59,7 +59,32 @@ param(
     # all four optical gates passed and the design was unmeasurable end to end.
     # Holding real ray heights at their baseline keeps the beam inside the rims
     # the mechanics will be cut to.
-    [double]$EnvelopeWeight = 100.0,
+    # DEFAULT 0 AFTER A CEILING CHECK, not 100. 100 was simply the first value
+    # that made fast-f2p5 buildable; it was never shown to be the right one, and
+    # it cost that design ~90% of its ghost gain and example-triplet its ENTIRE
+    # end-to-end benefit (-33.5% decisive -> -1.1% at 0.8 sigma, not
+    # significant). Swept on the two designs that bracket the behaviour:
+    #
+    #   weight   example-triplet          fast-f2p5
+    #      0     -8.3%  growth 1.077x     -10.1%  growth 1.487x     both mech PASS
+    #      1     -3.8%  growth 1.035x      -9.1%  growth 1.166x     both mech PASS
+    #     10     -2.1%  growth 1.019x      -5.0%  growth 1.050x     both mech PASS
+    #    100     -0.6%  growth 1.005x      -1.3%  growth 1.008x     both mech PASS
+    #
+    # EVERY weight passes mech on both designs, so the constraint was buying
+    # nothing measurable while costing most of the benefit. The pipeline already
+    # guards this properly: runner.st_mech HALTS on an obstructing barrel, and
+    # reaching it costs ~30 s of geometry stages before any Speos time. Paying
+    # 90% of the benefit on every design to avoid a 30-second failure on a rare
+    # one is the wrong trade.
+    #
+    # THE OPERANDS ARE STILL ADDED AT WEIGHT 0, deliberately. They measurably
+    # change the optimiser's path even weightless -- the sweep above was run
+    # that way, and removing them yields a different lens (the pre-ceiling code,
+    # which had no envelope operands at all, is what produced the one geometry
+    # that ever failed mech: `envelope FAILS by 1.87 mm`). Keeping them is what
+    # the table describes, so the default must not quietly mean something else.
+    [double]$EnvelopeWeight = 0.0,
     [switch]$VaryThickness          # also vary airspaces, not just curvatures
 )
 
